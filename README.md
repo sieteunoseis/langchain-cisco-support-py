@@ -23,7 +23,7 @@ This is a Python port of the TypeScript version available at [sieteunoseis/langc
 ## Prerequisites
 
 - Python 3.10 or higher
-- Node.js and npm (required for the MCP server)
+- A running MCP server instance in HTTP mode (see [MCP Server Setup](#mcp-server-setup))
 - API credentials from:
   - [OpenRouter](https://openrouter.ai/) - For AI model access
   - [Cisco API Console](https://apiconsole.cisco.com/) - For Cisco API access
@@ -47,6 +47,46 @@ poetry install
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 CISCO_CLIENT_ID=your_cisco_client_id_here
 CISCO_CLIENT_SECRET=your_cisco_client_secret_here
+MCP_SERVER_URL=http://localhost:3000/mcp
+MCP_AUTH_TOKEN=your_mcp_auth_token_here
+```
+
+Note: `MCP_AUTH_TOKEN` is optional and only needed if your MCP server requires authentication.
+
+## MCP Server Setup
+
+This client requires a running MCP server instance in HTTP mode. You have several options:
+
+### Option 1: Run the mcp-cisco-support server in HTTP mode
+
+If you have the [mcp-cisco-support](https://github.com/sieteunoseis/mcp-cisco-support) server, you can run it in HTTP mode:
+
+```bash
+# Set environment variables
+export CISCO_CLIENT_ID=your_cisco_client_id_here
+export CISCO_CLIENT_SECRET=your_cisco_client_secret_here
+export SUPPORT_API=all
+
+# Run the server in HTTP mode on port 3000
+mcp-cisco-support --http --port 3000
+```
+
+### Option 2: Use Docker
+
+```bash
+docker run -p 3000:3000 \
+  -e CISCO_CLIENT_ID=your_cisco_client_id \
+  -e CISCO_CLIENT_SECRET=your_cisco_client_secret \
+  -e SUPPORT_API=all \
+  mcp-cisco-support:latest --http --port 3000
+```
+
+### Option 3: Custom MCP Server URL
+
+If your MCP server is running elsewhere, update the `MCP_SERVER_URL` in your `.env` file:
+
+```env
+MCP_SERVER_URL=http://your-server:port/mcp
 ```
 
 ## Usage
@@ -94,21 +134,18 @@ Available models include:
 
 ### Selecting Specific APIs
 
-To only load specific Cisco APIs instead of all of them, modify the `SUPPORT_API` environment variable in [main.py:136](main.py#L136):
+To only load specific Cisco APIs instead of all of them, configure the `SUPPORT_API` environment variable on your MCP server when starting it:
 
-```python
-env={
-    "CISCO_CLIENT_ID": os.getenv("CISCO_CLIENT_ID", ""),
-    "CISCO_CLIENT_SECRET": os.getenv("CISCO_CLIENT_SECRET", ""),
-    "SUPPORT_API": "bug,psirt",  # Only load Bug and PSIRT APIs
-}
+```bash
+export SUPPORT_API="bug,psirt"  # Only load Bug and PSIRT APIs
+mcp-cisco-support --http --port 3000
 ```
 
 Available API options: `bug`, `case`, `eox`, `psirt`, `product`, `software`, `serial`, `rma`, or `all`
 
 ### Modifying Queries
 
-Edit the `queries` list in [main.py:177-181](main.py#L177-L181) to test different questions:
+Edit the `queries` list in [main.py:185-189](main.py#L185-L189) to test different questions:
 
 ```python
 queries = [
@@ -122,26 +159,27 @@ queries = [
 The application follows a three-layer architecture:
 
 1. **LangChain Agent** - Orchestrates the AI interaction and tool calling
-2. **MCP Client** - Bridges communication with the Cisco Support MCP server
-3. **Cisco Support APIs** - Provides access to bug, case, security, and product data
+2. **MCP Client (HTTP)** - Bridges communication with the Cisco Support MCP server via HTTP/SSE
+3. **MCP Server** - Provides tools and access to Cisco Support APIs
+4. **Cisco Support APIs** - Provides access to bug, case, security, and product data
 
 ```
 ┌─────────────────┐
 │  LangChain      │
 │  Agent          │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  MCP Client     │
 │  (Python)       │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  mcp-cisco-     │
-│  support        │
-│  (Node.js)      │
+│  MCP Client     │
+│  (Python/HTTP)  │
+└────────┬────────┘
+         │ HTTP/SSE
+         ▼
+┌─────────────────┐
+│  MCP Server     │
+│  (Any Language) │
 └────────┬────────┘
          │
          ▼
@@ -179,11 +217,12 @@ pip install -r requirements.txt
 ```
 
 ### MCP connection errors
-Ensure Node.js and npm are installed and accessible:
+Ensure your MCP server is running and accessible at the configured URL. Test the connection:
 ```bash
-node --version
-npm --version
+curl http://localhost:3000/sse
 ```
+
+If your server requires authentication, make sure to include the proper headers or query parameters.
 
 ### Authentication errors
 Verify your Cisco credentials are correct at the [Cisco API Console](https://apiconsole.cisco.com/)

@@ -18,40 +18,36 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 # Load environment variables
 load_dotenv()
 
 
-async def initialize_mcp_client() -> ClientSession:
+async def initialize_mcp_client(server_url: str, auth_token: str = "") -> ClientSession:
     """
-    Initialize the MCP client for Cisco Support.
+    Initialize the MCP client for Cisco Support via HTTP.
+
+    Args:
+        server_url: URL of the MCP server (e.g., "http://localhost:3000/mcp")
+        auth_token: Optional authentication token
 
     Returns:
         ClientSession: Connected MCP client session
     """
-    print("Initializing MCP client for Cisco Support...")
+    print(f"Initializing MCP client for Cisco Support at {server_url}...")
 
-    # Define server parameters for the Cisco Support MCP server
-    server_params = StdioServerParameters(
-        command="npx",
-        args=["-y", "mcp-cisco-support"],
-        env={
-            "CISCO_CLIENT_ID": os.getenv("CISCO_CLIENT_ID", ""),
-            "CISCO_CLIENT_SECRET": os.getenv("CISCO_CLIENT_SECRET", ""),
-            "SUPPORT_API": "all",  # Enable all APIs or specify which ones you need
-        }
-    )
+    # Create headers with authentication if token provided
+    headers = {}
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
 
-    # Create and return the stdio client
-    stdio_transport = await stdio_client(server_params)
-    stdio, write = stdio_transport
-
-    async with ClientSession(stdio, write) as session:
-        await session.initialize()
-        return session
+    # Create and return the streamable HTTP client
+    async with streamablehttp_client(server_url, headers=headers) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return session
 
 
 def create_pydantic_model_from_schema(schema: Dict[str, Any], model_name: str) -> type[BaseModel]:
@@ -162,18 +158,19 @@ async def create_langchain_tools_from_mcp(session: ClientSession) -> List[Struct
 async def main():
     """Main execution function."""
     try:
-        # Initialize MCP client
-        server_params = StdioServerParameters(
-            command="npx",
-            args=["-y", "mcp-cisco-support"],
-            env={
-                "CISCO_CLIENT_ID": os.getenv("CISCO_CLIENT_ID", ""),
-                "CISCO_CLIENT_SECRET": os.getenv("CISCO_CLIENT_SECRET", ""),
-                "SUPPORT_API": "all",
-            }
-        )
+        # Get MCP server URL from environment variable or use default
+        mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:3000/mcp")
+        mcp_auth_token = os.getenv("MCP_AUTH_TOKEN", "")
 
-        async with stdio_client(server_params) as (read, write):
+        print(f"Connecting to MCP server at {mcp_server_url}...")
+
+        # Create headers with authentication if token provided
+        headers = {}
+        if mcp_auth_token:
+            headers["Authorization"] = f"Bearer {mcp_auth_token}"
+
+        # Initialize MCP client via HTTP
+        async with streamablehttp_client(mcp_server_url, headers=headers) as (read, write, get_session_id):
             async with ClientSession(read, write) as session:
                 await session.initialize()
 
