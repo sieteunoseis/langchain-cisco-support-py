@@ -43,6 +43,8 @@ poetry install
 ```
 
 3. Create a `.env` file in the project root with your credentials:
+
+**If running MCP server locally (Option 1):**
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 CISCO_CLIENT_ID=your_cisco_client_id_here
@@ -51,7 +53,17 @@ MCP_SERVER_URL=http://localhost:3000/mcp
 MCP_AUTH_TOKEN=your_mcp_auth_token_here
 ```
 
-Note: `MCP_AUTH_TOKEN` is optional and only needed if your MCP server requires authentication.
+**If running MCP server in Docker (Options 2-3):**
+```env
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+MCP_SERVER_URL=http://localhost:3000/mcp
+MCP_AUTH_TOKEN=your_mcp_auth_token_here
+```
+Note: When using Docker, Cisco credentials are configured in the container, not in the Python client's `.env`
+
+**Notes:**
+- `MCP_AUTH_TOKEN` is optional and only needed if your MCP server requires authentication
+- If you're running the MCP server in Docker, you don't need `CISCO_CLIENT_ID` or `CISCO_CLIENT_SECRET` in your Python client's `.env` file
 
 ## MCP Server Setup
 
@@ -73,15 +85,79 @@ mcp-cisco-support --http --port 3000
 
 ### Option 2: Use Docker
 
+Run the MCP server in a Docker container locally:
+
 ```bash
-docker run -p 3000:3000 \
+docker run -d \
+  --name mcp-cisco-support \
+  -p 3000:3000 \
   -e CISCO_CLIENT_ID=your_cisco_client_id \
   -e CISCO_CLIENT_SECRET=your_cisco_client_secret \
   -e SUPPORT_API=all \
+  -e AUTH_TOKEN=your_auth_token_here \
   mcp-cisco-support:latest --http --port 3000
 ```
 
-### Option 3: Custom MCP Server URL
+**Important Notes for Docker:**
+- The `-d` flag runs the container in detached mode (background)
+- Cisco API credentials are passed to the Docker container via environment variables
+- The `AUTH_TOKEN` environment variable sets the authentication token for the MCP server
+- Your Python client's `.env` file only needs `MCP_SERVER_URL` and `MCP_AUTH_TOKEN` (no Cisco credentials needed)
+
+**Docker Container Management:**
+
+```bash
+# View container logs
+docker logs mcp-cisco-support
+
+# Follow logs in real-time
+docker logs -f mcp-cisco-support
+
+# Stop the container
+docker stop mcp-cisco-support
+
+# Start the container again
+docker start mcp-cisco-support
+
+# Remove the container
+docker rm mcp-cisco-support
+```
+
+### Option 3: Use Docker Compose
+
+For easier management, create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  mcp-server:
+    image: mcp-cisco-support:latest
+    container_name: mcp-cisco-support
+    ports:
+      - "3000:3000"
+    environment:
+      - CISCO_CLIENT_ID=your_cisco_client_id_here
+      - CISCO_CLIENT_SECRET=your_cisco_client_secret_here
+      - SUPPORT_API=all
+      - AUTH_TOKEN=your_auth_token_here
+    command: ["--http", "--port", "3000"]
+    restart: unless-stopped
+```
+
+Then run:
+```bash
+# Start the server
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the server
+docker-compose down
+```
+
+### Option 4: Custom MCP Server URL
 
 If your MCP server is running elsewhere, update the `MCP_SERVER_URL` in your `.env` file:
 
